@@ -24,7 +24,6 @@ def db():
         print(e, flush=True)
         raise Exception("Database under maintenance", 500)
 
-
 ##############################
 def no_cache(view):
     @wraps(view)
@@ -36,48 +35,43 @@ def no_cache(view):
         return response
     return no_cache_view
 
-
 ##############################
 USER_FIRST_NAME_MIN = 2
 USER_FIRST_NAME_MAX = 20
 REGEX_USER_FIRST_NAME = f"^.{{{USER_FIRST_NAME_MIN},{USER_FIRST_NAME_MAX}}}$"
 def validate_user_first_name():
-    user_first_name = request.form.get("user_first_name", "").strip()
+    user_first_name = request.form.get("user_first_name")
     if not re.match(REGEX_USER_FIRST_NAME, user_first_name):
         raise Exception("company_exception user_first_name")
     return user_first_name
-
 
 ##############################
 USER_LAST_NAME_MIN = 2
 USER_LAST_NAME_MAX = 20
 REGEX_USER_LAST_NAME = f"^.{{{USER_LAST_NAME_MIN},{USER_LAST_NAME_MAX}}}$"
 def validate_user_last_name():
-    user_last_name = request.form.get("user_last_name", "").strip()
+    user_last_name = request.form.get("user_last_name")
     if not re.match(REGEX_USER_LAST_NAME, user_last_name):
         raise Exception("company_exception user_last_name")
     return user_last_name
 
-
 ##############################
 REGEX_EMAIL = "^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$"
-def validate_email( email ):
-    email = email.strip()
-    if not re.match(REGEX_EMAIL, email): 
-        raise Exception("company_exception email")
-    return email
-
+def validate_user_email( user_email ):
+    validate_user_email = user_email.strip()
+    if not re.match(REGEX_EMAIL, user_email):
+        raise Exception("company_exception user_email")
+    return user_email
 
 ##############################
 USER_PASSWORD_MIN = 8
 USER_PASSWORD_MAX = 50
 REGEX_USER_PASSWORD = f"^.{{{USER_PASSWORD_MIN},{USER_PASSWORD_MAX}}}$"
-def validate_user_password( password ):
-    user_password = password.strip()
+def validate_user_password():
+    user_password = request.form.get("user_password", "").strip()
     if not re.match(REGEX_USER_PASSWORD, user_password):
         raise Exception("company_exception user_password")
     return user_password
-
 
 ##############################
 # 0 to 9 letters a to f
@@ -88,6 +82,7 @@ def validate_uuid4(uuid4):
         raise Exception("company_exception uuid4 invalid")
     return uuid
 
+
 ##############################
 REGEX_UUID4_PARANOIA = "^[0-9a-f]{64}$"
 def validate_uuid4_paranoia(uuid4):
@@ -96,32 +91,30 @@ def validate_uuid4_paranoia(uuid4):
         raise Exception("company_exception paranoia")
     return uuid
 
-
-
 ##############################
-def send_email(subject, html):
+def send_email(subject, activation_email):
     try:    
         # Create a gmail
         # Enable (turn on) 2 step verification/factor in the google account manager
         # Visit: https://myaccount.google.com/apppasswords
-        # Copy the key : axxl yzyp jaau vcnr
+        # Copy the key : 
 
         # Email and password of the sender's Gmail account
-        sender_email = "albertlund121@gmail.com"
-        password = "axxlyzypjaauvcnr"  # If 2FA is on, use an App Password instead
+        sender_email = "rasmus.meinche@gmail.com"
+        password = "dqid pudd nhdb wbmb"  # If 2FA is on, use an App Password instead
 
         # Receiver email address
-        receiver_email = "albertlund121@gmail.com"
+        receiver_email = "rasmus.meinche@gmail.com"
         
         # Create the email message
         message = MIMEMultipart()
-        message["From"] = "Washworld"
+        message["From"] = "Wash World"
         message["To"] = receiver_email
         message["Subject"] = subject
 
         # Body of the email
         # body = f"""<h1>Hi</h1><h2>Hi again</h2>"""
-        message.attach(MIMEText(html, "html"))
+        message.attach(MIMEText(activation_email, "html"))
 
         # Connect to Gmail's SMTP server and send the email
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
