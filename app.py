@@ -16,6 +16,9 @@ ic.configureOutput(prefix=f"_____ | ", includeContext=True)
 
 app = Flask(__name__)
 
+from flask_cors import CORS
+CORS(app)
+
 ##############################
 @app.get("/sign-up")
 def show_sign_up():
@@ -25,11 +28,13 @@ def show_sign_up():
 @app.post("/sign-up")
 def sign_up():
     try:
+        data = request.get_json()
+
         user_pk = uuid.uuid4().hex
-        user_first_name = x.validate_user_first_name()
-        user_last_name = x.validate_user_last_name()
-        user_email = x.validate_user_email( request.form.get("user_email", "" ))
-        user_password = x.validate_user_password()
+        user_first_name = x.validate_user_first_name(data.get("user_first_name", ""))
+        user_last_name = x.validate_user_last_name(data.get("user_last_name", ""))
+        user_email = x.validate_user_email(data.get("email", ""))
+        user_password = x.validate_user_password(data.get("password", ""))
         user_password_hashed = generate_password_hash(user_password)
         user_created_at = int(time.time())
         user_updated_at = int(time.time())
