@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request
+from flask_jwt_extended import JWTManager, create_access_token
 import uuid
 import time
 
@@ -19,6 +20,9 @@ app = Flask(__name__)
 from flask_cors import CORS
 CORS(app)
 
+app.config["JWT_SECRET_KEY"] = "din-hemmelige-key"
+jwt = JWTManager(app)
+
 ##############################
 @app.get("/sign-up")
 def show_sign_up():
@@ -33,8 +37,8 @@ def sign_up():
         user_pk = uuid.uuid4().hex
         user_first_name = x.validate_user_first_name(data.get("user_first_name", ""))
         user_last_name = x.validate_user_last_name(data.get("user_last_name", ""))
-        user_email = x.validate_user_email(data.get("email", ""))
-        user_password = x.validate_user_password(data.get("password", ""))
+        user_email = x.validate_user_email(data.get("user_email", ""))
+        user_password = x.validate_user_password(data.get("user_password", ""))
         user_password_hashed = generate_password_hash(user_password)
         user_created_at = int(time.time())
         user_updated_at = int(time.time())
@@ -68,6 +72,70 @@ def sign_up():
             return f"At least {x.USER_PASSWORD_MIN} characters", 400
 
         return str(ex), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
+@app.post("/login")
+def login():
+    try:
+        data = request.get_json()
+
+        user_email = x.validate_user_email( data.get("user_email", "") )
+        user_password = x.validate_user_password( data.get("user_password", ""))
+
+        db, cursor = x.db()
+        q = """
+        SELECT
+            user_first_name,
+            user_last_name,
+            user_email,
+            user_password_hashed
+        FROM users
+        WHERE user_email = %s
+        """
+        cursor.execute(q, (user_email,))
+        user = cursor.fetchone()
+
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        if not check_password_hash(
+            user["user_password_hashed"],
+            user_password
+        ):
+            return jsonify({"error": "Invalid credentials"}), 401
+        
+        user_first_name = user["user_first_name"]
+        user_last_name = user["user_last_name"]
+        user_email = user["user_email"]
+
+        access_token = create_access_token(identity={
+            "user_email": user_email,
+        })
+
+        return jsonify({
+            "message": "Login successful",
+            "access_token": access_token,
+            "user": {
+                "user_first_name": user_first_name,
+                "user_last_name": user_last_name,
+                "user_email": user_email
+            }
+        }), 200
+
+    except Exception as ex:
+        ic(ex)
+
+        if "company_exception user_email" in str(ex):
+            return jsonify({"error": "Invalid credentials"}), 401
+
+        if "company_exception user_password" in str(ex):
+            return jsonify({"error": "Invalid credentials"}), 401
+
+        return jsonify({"error": "System under maintenance"}), 500
+
     finally:
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
