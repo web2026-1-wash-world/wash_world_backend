@@ -1,35 +1,23 @@
-from flask import Flask, render_template, request, jsonify
-from flask_cors import CORS
+from flask import Flask, render_template, request
+from flask_jwt_extended import JWTManager, create_access_token
 import uuid
 import time
-
-from flask_jwt_extended import JWTManager
-from flask_jwt_extended import create_access_token
 
 from werkzeug.security import generate_password_hash
 from werkzeug.security import check_password_hash
 
 import x
 
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
 from icecream import ic
 ic.configureOutput(prefix=f"_____ | ", includeContext=True)
 
 app = Flask(__name__)
 
-app.config["JWT_SECRET_KEY"] = "super-secret-key"
+from flask_cors import CORS
+CORS(app)
 
+app.config["JWT_SECRET_KEY"] = "din-hemmelige-key"
 jwt = JWTManager(app)
-
-CORS(app)  # allows everything
-
-##############################
-@app.get("/")
-def index():
-    return jsonify({"status":"ok", "message":"Connected"})
 
 ##############################
 @app.get("/sign-up")
@@ -40,11 +28,13 @@ def show_sign_up():
 @app.post("/sign-up")
 def sign_up():
     try:
+        data = request.get_json()
+
         user_pk = uuid.uuid4().hex
-        user_first_name = x.validate_user_first_name()
-        user_last_name = x.validate_user_last_name()
-        user_email = x.validate_user_email( request.form.get("user_email", "" ))
-        user_password = x.validate_user_password()
+        user_first_name = x.validate_user_first_name(data.get("user_first_name", ""))
+        user_last_name = x.validate_user_last_name(data.get("user_last_name", ""))
+        user_email = x.validate_user_email(data.get("user_email", ""))
+        user_password = x.validate_user_password(data.get("user_password", ""))
         user_password_hashed = generate_password_hash(user_password)
         user_created_at = int(time.time())
         user_updated_at = int(time.time())
@@ -83,45 +73,13 @@ def sign_up():
         if "db" in locals(): db.close()
 
 ##############################
-@app.get("/verify/<key>")
-def verify_account(key):
-    try:
-        key = x.validate_uuid4(key)
-        db, cursor = x.db()
-        user_verified_at = int(time.time())
-        q = """
-            UPDATE users
-            SET user_verified_at = %s
-            WHERE user_verification_key = %s AND user_verified_at = 0
-        """
-        cursor.execute(q, (user_verified_at, key))
-        db.commit()
-        if cursor.rowcount == 0:
-            return "user already verified"
-
-        return f"Welcome to the system, you are verified"
-    except Exception as ex: 
-        ic(ex)
-        if "company_exception uuid4 invalid" in str(ex):
-            return "Invalid key", 400
-
-        return str(ex), 500
-    finally:
-        if "cursor" in locals(): cursor.close()
-        if "db" in locals(): db.close()
-
-
-##############################
-@app.get("/login")
-def show_login():
-    return render_template("page_login.html")
-
-##############################
 @app.post("/login")
 def login():
     try:
-        user_email = x.validate_user_email( request.form.get("user_email", "") )
-        user_password = x.validate_user_password()
+        data = request.get_json()
+
+        user_email = x.validate_user_email( data.get("user_email", "") )
+        user_password = x.validate_user_password( data.get("user_password", ""))
 
         db, cursor = x.db()
         q = """
@@ -154,10 +112,13 @@ def login():
         })
 
         return jsonify({
+            "message": "Login successful",
             "access_token": access_token,
-            "user_first_name": user_first_name,
-            "user_last_name": user_last_name,
-            "user_email": user_email
+            "user": {
+                "user_first_name": user_first_name,
+                "user_last_name": user_last_name,
+                "user_email": user_email
+            }
         }), 200
 
     except Exception as ex:
@@ -172,5 +133,121 @@ def login():
         return jsonify({"error": "System under maintenance"}), 500
 
     finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
+@app.get("/verify/<key>")
+def verify_account(key):
+    try:
+        key = x.validate_uuid4(key)
+        db, cursor = x.db()
+        user_verified_at = int(time.time())
+        q = """
+            UPDATE users
+            SET user_verified_at = %s
+            WHERE user_verification_key = %s AND user_verified_at = 0
+        """
+        cursor.execute(q, (user_verified_at, key))
+        db.commit()
+        if cursor.rowcount == 0:
+            return "user already verified"
+
+        return f"Welcome to the system, you are verified"
+    except Exception as ex: 
+        ic(ex)
+        if "company_exception uuid4 invalid" in str(ex):
+            return "Invalid key", 400
+
+        return str(ex), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+
+##############################
+@app.get("/forgot-password")
+def show_forgot_password():
+    return render_template("/page_forgot_password.html")
+
+##############################
+@app.post("/forgot-password")
+def forgot_password():
+    try:
+        user_email = x.validate_user_email(request.form.get("user_email", ""))
+        db, cursor = x.db()
+        q = "SELECT user_reset_password_key AS 'reset_key' FROM users WHERE user_email = %s"
+        cursor.execute(q, (user_email,))
+        row = cursor.fetchone()
+
+        if not row:
+            return "Email not found", 400
+
+        html_forgot_password = render_template("/email_forgot_password.html", user_reset_password_key=row["reset_key"])
+
+        x.send_email("Reset your password", html_forgot_password)
+
+        return "Check your email"
+
+    except Exception as ex:
+        ic(ex)
+
+        if "company_exception email" in str(ex):
+            return "invalid email", 400
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
+@app.get("/reset-password/<reset_key>")
+def show_reset_password(reset_key):
+    try:
+        reset_key = x.validate_uuid4_paranoia(reset_key)
+        db, cursor = x.db()
+
+        q = """SELECT user_reset_password_key FROM users WHERE user_reset_password_key = %s"""
+        cursor.execute(q, (reset_key,))
+        row = cursor.fetchone()
+
+        if not row:
+            return "ups...", 400
+
+        return render_template("/page_reset_password.html", reset_key=reset_key)
+
+    except Exception as ex: 
+        ic(ex)
+        if "company_exception uuid4 invalid" in str(ex):
+            return "Invalid key", 400
+
+        return str(ex), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
+@app.post("/reset-password")
+def reset_password():
+    try:
+        user_password = x.validate_user_password()
+        confirm_user_password = x.validate_user_password()
+
+        if user_password != confirm_user_password:
+            return "Tjek om adgangskoderne matcher", 400
+
+        reset_key = x.validate_uuid4_paranoia(request.form.get("reset_key", ""))
+
+        return "Agangskode ændret, vær venlig at logge ind"
+    except Exception as ex:
+
+        if "company_exception user_email" in str(ex):
+            return jsonify({"error": "Invalid credentials"}), 401
+
+        if "company_exception user_password" in str(ex):
+            return jsonify({"error": "Invalid credentials"}), 401
+
+        return jsonify({"error": "System under maintenance"}), 500
+
+        return str(ex), 500
+    finally: 
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
