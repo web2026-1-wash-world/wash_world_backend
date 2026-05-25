@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token
 import uuid
 import time
@@ -12,12 +12,37 @@ from icecream import ic
 ic.configureOutput(prefix=f"_____ | ", includeContext=True)
 
 app = Flask(__name__)
+app.json.ensure_ascii = False # Denne linje viser ÆØÅ i JSON svar, ellers bliver de til unicode
 
 from flask_cors import CORS
 CORS(app)
 
 app.config["JWT_SECRET_KEY"] = "din-hemmelige-key"
 jwt = JWTManager(app)
+
+
+##########################################################
+# MATEMATIK TIL AT BEREGNE AFSTAND TIL NÆRMESTE VASKEHAL #
+##########################################################
+from math import radians, sin, cos, sqrt, atan2
+
+def distance(lat1, lon1, lat2, lon2):
+    R = 6371  # Earth radius in km
+
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+
+    a = (
+        sin(dlat / 2) ** 2
+        + cos(radians(lat1))
+        * cos(radians(lat2))
+        * sin(dlon / 2) ** 2
+    )
+
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+    return R * c
+##########################################################
 
 ##############################
 @app.get("/sign-up")
@@ -28,13 +53,11 @@ def show_sign_up():
 @app.post("/sign-up")
 def sign_up():
     try:
-        data = request.get_json()
-
         user_pk = uuid.uuid4().hex
-        user_first_name = x.validate_user_first_name(data.get("user_first_name", ""))
-        user_last_name = x.validate_user_last_name(data.get("user_last_name", ""))
-        user_email = x.validate_user_email(data.get("user_email", ""))
-        user_password = x.validate_user_password(data.get("user_password", ""))
+        user_first_name = x.validate_user_first_name(request.form.get("user_first_name", ""))
+        user_last_name = x.validate_user_last_name(request.form.get("user_last_name", ""))
+        user_email = x.validate_user_email(request.form.get("user_email", ""))
+        user_password = x.validate_user_password(request.form.get("user_password", ""))
         user_password_hashed = generate_password_hash(user_password)
         user_created_at = int(time.time())
         user_updated_at = int(time.time())
@@ -76,10 +99,8 @@ def sign_up():
 @app.post("/login")
 def login():
     try:
-        data = request.get_json()
-
-        user_email = x.validate_user_email( data.get("user_email", "") )
-        user_password = x.validate_user_password( data.get("user_password", ""))
+        user_email = x.validate_user_email(request.form.get("user_email", "") )
+        user_password = x.validate_user_password(request.form.get("user_password", ""))
 
         db, cursor = x.db()
         q = """
@@ -228,26 +249,123 @@ def show_reset_password(reset_key):
 @app.post("/reset-password")
 def reset_password():
     try:
-        user_password = x.validate_user_password()
-        confirm_user_password = x.validate_user_password()
+        password = x.validate_user_password( request.form.get("password", ""))
+        confirm_password = request.form.get("confirm-password", "").strip()
+        if confirm_password != password:
+            return "Passwords do not match", 400
 
-        if user_password != confirm_user_password:
-            return "Tjek om adgangskoderne matcher", 400
+        key = x.validate_uuid4_paranoia( request.form.get("key", ""))
+        user_hashed_password = generate_password_hash(password)
+        new_reset_password_key = uuid.uuid4().hex + uuid.uuid4().hex
 
-        reset_key = x.validate_uuid4_paranoia(request.form.get("reset_key", ""))
+        db, cursor = x.db()
+        q = """
+            UPDATE users
+            SET user_password_hashed = %s, user_reset_password_key = %s
+            WHERE user_reset_password_key = %s
+        """
+        cursor.execute(q, (user_hashed_password, new_reset_password_key, key))
+        db.commit()
 
-        return "Agangskode ændret, vær venlig at logge ind"
+        if cursor.rowcount == 0:
+            return "Invalid key", 400
+
+        return "Password changed, please login"
+
     except Exception as ex:
-
-        if "company_exception user_email" in str(ex):
-            return jsonify({"error": "Invalid credentials"}), 401
+        ic(ex)
 
         if "company_exception user_password" in str(ex):
-            return jsonify({"error": "Invalid credentials"}), 401
+            return f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters", 400
 
-        return jsonify({"error": "System under maintenance"}), 500
+        if "company_exception paranoia" in str(ex):
+            return "Invalid key", 400
 
+        return str(ex), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+
+
+
+##############################
+@app.get("/stations")
+def get_stations():
+    try:
+        db, cursor = x.db()
+        q = "SELECT name FROM stations"
+        cursor.execute(q)
+        stations = cursor.fetchall()
+
+        return jsonify(stations), 200
+    except Exception as ex:
+        ic(ex)
         return str(ex), 500
     finally: 
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
+
+##############################
+@app.get("/stations/<station_pk>")
+def get_single_station(station_pk):
+    try:
+        db, cursor = x.db()
+        q = "SELECT name, adress, latitude, longitude FROM stations WHERE station_pk = %s"
+        cursor.execute(q, (station_pk,))
+        station = cursor.fetchone()
+
+        if not station:
+            return "Station not found", 404
+    
+        return jsonify(station), 200
+
+    except Exception as ex:
+        ic(ex)
+        return str(ex), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
+@app.get("/stations/nearby")
+def get_nearby_stations():
+    try:
+        lat = float(request.args.get("lat"))
+        lon = float(request.args.get("lon"))
+
+        db, cursor = x.db()
+        q = """
+        SELECT station_pk, name, adress, latitude, longitude
+        FROM stations
+        """
+        cursor.execute(q)
+        stations = cursor.fetchall()
+
+        for station in stations:
+            station["distance"] = distance(
+                lat,
+                lon,
+                float(station["latitude"]),
+                float(station["longitude"])
+            )
+
+        stations.sort(key=lambda s: s["distance"])
+
+        nearest_3 = stations[:3]
+
+        return jsonify(nearest_3), 200
+
+    except Exception as ex:
+        ic(ex)
+        return str(ex), 500
+
+    finally:
+        if "cursor" in locals():
+            cursor.close()
+
+        if "db" in locals():
+            db.close()
+
+# ##############################
+# @app.get("/stations/<station_pk>/availability") NICE TO HAVE - IKKE ET MUST?

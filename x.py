@@ -103,7 +103,7 @@ def send_email(subject, activation_email):
         password = "dqid pudd nhdb wbmb"  # If 2FA is on, use an App Password instead
 
         # Receiver email address
-        receiver_email = "rasmus.meinche@gmail.com"
+        receiver_email = "olivervalter13@gmail.com"
         
         # Create the email message
         message = MIMEMultipart()
