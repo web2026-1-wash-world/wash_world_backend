@@ -270,10 +270,10 @@ def reset_password():
         if cursor.rowcount == 0:
             return "Invalid key", 400
 
-        return "Password changed, please login"
+        reset_key = x.validate_uuid4_paranoia(request.form.get("reset_key", ""))
 
+        return "Agangskode ændret, vær venlig at logge ind"
     except Exception as ex:
-        ic(ex)
 
         if "company_exception user_password" in str(ex):
             return f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters", 400
