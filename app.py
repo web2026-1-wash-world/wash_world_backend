@@ -45,11 +45,6 @@ def distance(lat1, lon1, lat2, lon2):
 ##########################################################
 
 ##############################
-@app.get("/sign-up")
-def show_sign_up():
-    return render_template("/page_sign_up.html")
-
-##############################
 @app.post("/sign-up")
 def sign_up():
     try:
@@ -96,6 +91,57 @@ def sign_up():
         if "db" in locals(): db.close()
 
 ##############################
+
+##############################
+@app.post("/sign-up-copy")
+def sign_up_copy():
+    try:
+        data = request.get_json()
+        
+        user_pk = uuid.uuid4().hex
+        user_first_name = x.validate_user_first_name(data.get("user_first_name", ""))
+        user_last_name = x.validate_user_last_name(data.get("user_last_name", ""))
+        user_email = x.validate_user_email(data.get("user_email", ""))
+        user_password = x.validate_user_password(data.get("user_password", ""))
+        user_password_hashed = generate_password_hash(user_password)
+        user_created_at = int(time.time())
+        user_updated_at = int(time.time())
+        ic(user_created_at)
+        user_verification_key = uuid.uuid4().hex
+        user_verified_at = 0
+        user_reset_password_key = uuid.uuid4().hex + uuid.uuid4().hex
+
+        db, cursor = x.db()
+        q = "INSERT INTO users (user_pk, user_first_name, user_last_name, user_email, user_password_hashed, user_created_at, user_updated_at, user_verification_key, user_verified_at, user_reset_password_key) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(q, (user_pk, user_first_name, user_last_name, user_email, user_password_hashed, user_created_at, user_updated_at, user_verification_key, user_verified_at, user_reset_password_key))
+        db.commit()
+
+        activation_email = render_template("email_welcome.html", user_verification_key=user_verification_key)
+
+        x.send_email("Activate your account", activation_email)
+
+        return "We have sent a confirmation email to your account", 201
+    except Exception as ex:
+        ic(ex)
+        if "company_exception user_first_name" in str(ex):
+            return f"First name must be between {x.USER_FIRST_NAME_MIN} and {x.USER_FIRST_NAME_MAX} characters", 400
+            
+        if "company_exception user_last_name" in str(ex):
+            return f"Last name must be between {x.USER_LAST_NAME_MIN} and {x.USER_LAST_NAME_MAX} characters", 400
+
+        if "company_exception user_email" in str(ex):
+            return "Invalid Email", 400
+
+        if "company_exception user_password" in str(ex):
+            return f"At least {x.USER_PASSWORD_MIN} characters", 400
+
+        return str(ex), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
+
 @app.post("/login")
 def login():
     try:
