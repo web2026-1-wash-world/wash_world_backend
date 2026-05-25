@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 from flask_jwt_extended import JWTManager, create_access_token
 import uuid
 import time
@@ -8,10 +8,6 @@ from werkzeug.security import check_password_hash
 
 import x
 
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
 from icecream import ic
 ic.configureOutput(prefix=f"_____ | ", includeContext=True)
 
@@ -20,7 +16,7 @@ app = Flask(__name__)
 from flask_cors import CORS
 CORS(app)
 
-app.config["JWT_SECRET_KEY"] = "din-hemmelige-key"
+app.config["JWT_SECRET_KEY"] = "super-secret-key"
 jwt = JWTManager(app)
 
 ##############################
