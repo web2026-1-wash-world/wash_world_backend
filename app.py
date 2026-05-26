@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-from flask_jwt_extended import JWTManager, create_access_token
+from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 import uuid
 import time
 
@@ -17,7 +17,7 @@ app.json.ensure_ascii = False # Denne linje viser ÆØÅ i JSON svar, ellers bli
 from flask_cors import CORS
 CORS(app)
 
-app.config["JWT_SECRET_KEY"] = "din-hemmelige-key"
+app.config["JWT_SECRET_KEY"] = "super-secret-key"
 jwt = JWTManager(app)
 
 
@@ -53,11 +53,13 @@ def show_sign_up():
 @app.post("/sign-up")
 def sign_up():
     try:
+        data = request.get_json()
+        
         user_pk = uuid.uuid4().hex
-        user_first_name = x.validate_user_first_name(request.form.get("user_first_name", ""))
-        user_last_name = x.validate_user_last_name(request.form.get("user_last_name", ""))
-        user_email = x.validate_user_email(request.form.get("user_email", ""))
-        user_password = x.validate_user_password(request.form.get("user_password", ""))
+        user_first_name = x.validate_user_first_name(data.get("user_first_name", ""))
+        user_last_name = x.validate_user_last_name(data.get("user_last_name", ""))
+        user_email = x.validate_user_email(data.get("user_email", ""))
+        user_password = x.validate_user_password(data.get("user_password", ""))
         user_password_hashed = generate_password_hash(user_password)
         user_created_at = int(time.time())
         user_updated_at = int(time.time())
@@ -128,9 +130,7 @@ def login():
         user_last_name = user["user_last_name"]
         user_email = user["user_email"]
 
-        access_token = create_access_token(identity={
-            "user_email": user_email,
-        })
+        access_token = create_access_token(identity=user_email)
 
         return jsonify({
             "message": "Login successful",
@@ -156,6 +156,12 @@ def login():
     finally:
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
+
+@app.get("/profile")
+@jwt_required()
+def profile():
+    current_user = get_jwt_identity()
+    return jsonify({"user": current_user}), 200
 
 ##############################
 @app.get("/verify/<key>")
@@ -185,6 +191,34 @@ def verify_account(key):
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
 
+##############################
+@app.post("/logout")
+@jwt_required()
+def logout():
+    return jsonify({"message": "Logout successful"}), 200
+
+##############################
+@app.delete("/delete-account/<user_pk>")
+@jwt_required()
+def delete_account(user_pk):
+    try:
+        db, cursor = x.db()
+        user_email = get_jwt_identity()
+        q = "DELETE FROM users WHERE user_pk = %s"
+        cursor.execute(q, (user_pk,))
+        db.commit()
+
+        if cursor.rowcount == 0:
+            return "User not found", 404
+
+        return "Account deleted", 200
+
+    except Exception as ex:
+        ic(ex)
+        return str(ex), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
 
 ##############################
 @app.get("/forgot-password")
@@ -287,8 +321,6 @@ def reset_password():
         if "db" in locals(): db.close()
 
 
-
-
 ##############################
 @app.get("/stations")
 def get_stations():
@@ -343,12 +375,12 @@ def get_nearby_stations():
         stations = cursor.fetchall()
 
         for station in stations:
-            station["distance"] = distance(
+            station["distance"] = round(distance(
                 lat,
                 lon,
                 float(station["latitude"]),
                 float(station["longitude"])
-            )
+            ), 2)
 
         stations.sort(key=lambda s: s["distance"])
 
