@@ -98,6 +98,7 @@ def sign_up():
         if "db" in locals(): db.close()
 
 ##############################
+
 @app.post("/login")
 def login():
     try:
@@ -375,12 +376,12 @@ def get_nearby_stations():
         stations = cursor.fetchall()
 
         for station in stations:
-            station["distance"] = round(distance(
+            station["distance"] = distance(
                 lat,
                 lon,
                 float(station["latitude"]),
                 float(station["longitude"])
-            ), 2)
+            )
 
         stations.sort(key=lambda s: s["distance"])
 
