@@ -77,7 +77,7 @@ def sign_up():
 
         x.send_email("Verificer din profil", activation_email)
 
-        return jsonify({"message": "Vi har sendt en verificerings-email til din mail"}), 201
+        return jsonify({"message": "Vi har sendt en verificerings-email"}), 201
     except Exception as ex:
         ic(ex)
         if "company_exception user_first_name" in str(ex):
