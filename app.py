@@ -75,9 +75,9 @@ def sign_up():
 
         activation_email = render_template("email_welcome.html", user_verification_key=user_verification_key)
 
-        x.send_email("Activate your account", activation_email)
+        x.send_email("Verificer din profil", activation_email)
 
-        return jsonify({"message": "We have sent a confirmation email to your account"}), 201
+        return jsonify({"message": "Vi har sendt en verificerings-email til din mail"}), 201
     except Exception as ex:
         ic(ex)
         if "company_exception user_first_name" in str(ex):
@@ -102,8 +102,10 @@ def sign_up():
 @app.post("/login")
 def login():
     try:
-        user_email = x.validate_user_email(request.form.get("user_email", "") )
-        user_password = x.validate_user_password(request.form.get("user_password", ""))
+        data = request.get_json()
+
+        user_email = x.validate_user_email(data.get("user_email", "") )
+        user_password = x.validate_user_password(data.form.get("user_password", ""))
 
         db, cursor = x.db()
         q = """
@@ -158,6 +160,7 @@ def login():
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
 
+##############################
 @app.get("/profile")
 @jwt_required()
 def profile():
@@ -245,13 +248,13 @@ def forgot_password():
 
         x.send_email("Reset your password", html_forgot_password)
 
-        return {"message": "Check your email"}, 200
+        return jsonify({"message": "Check your email"}), 200
 
     except Exception as ex:
         ic(ex)
 
         if "company_exception user_email" in str(ex):
-            return {"error": "invalid email"}, 400
+            return jsonify({"error": "invalid email"}), 400
 
         return {"error": "server error"}, 500
 
@@ -294,7 +297,7 @@ def reset_password():
         password = x.validate_user_password( data.get("user_password", ""))
         confirm_password = x.validate_user_password(data.get("confirm_password", ""))
         if confirm_password != password:
-            return "Passwords do not match", 400
+            return jsonify({"error" : "Passwords do not match"}), 400
 
         key = x.validate_uuid4_paranoia( data.get("reset_key", ""))
         user_hashed_password = generate_password_hash(password)
@@ -310,7 +313,7 @@ def reset_password():
         db.commit()
 
         if cursor.rowcount == 0:
-            return "Invalid key", 400
+            return jsonify({"Invalid key"}), 400
 
         return redirect(f"http://localhost:3000/login")
 
@@ -318,7 +321,7 @@ def reset_password():
         ic(ex)
 
         if "company_exception user_password" in str(ex):
-            return f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters", 400
+            return jsonify({"error": f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters"}), 400
 
         if "company_exception paranoia" in str(ex):
             return "Invalid key", 400
