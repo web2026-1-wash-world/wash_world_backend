@@ -86,7 +86,7 @@ def validate_uuid4(uuid4):
 REGEX_UUID4_PARANOIA = "^[0-9a-f]{64}$"
 def validate_uuid4_paranoia(uuid4):
     uuid = uuid4.strip()
-    if not re.match(REGEX_UUID4_PARANOIA, uuid):
+    if not re.match(REGEX_UUID4, uuid):
         raise Exception("company_exception paranoia")
     return uuid
 
@@ -103,7 +103,7 @@ def send_email(subject, activation_email):
         password = "dqid pudd nhdb wbmb"  # If 2FA is on, use an App Password instead
 
         # Receiver email address
-        receiver_email = "rasmus.meinche@gmail.com"
+        receiver_email = "olivervalter13@gmail.com"
         
         # Create the email message
         message = MIMEMultipart()
