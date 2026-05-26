@@ -17,7 +17,7 @@ app.json.ensure_ascii = False # Denne linje viser ÆØÅ i JSON svar, ellers bli
 from flask_cors import CORS
 CORS(app)
 
-app.config["JWT_SECRET_KEY"] = "din-hemmelige-key"
+app.config["JWT_SECRET_KEY"] = "super-secret-key"
 jwt = JWTManager(app)
 
 
@@ -42,6 +42,12 @@ def distance(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
     return R * c
+##########################################################
+
+##############################
+@app.get("/sign-up")
+def show_sign_up():
+    return render_template("/page_sign_up.html")
 
 ##############################
 @app.post("/sign-up")
@@ -125,9 +131,7 @@ def login():
         user_last_name = user["user_last_name"]
         user_email = user["user_email"]
 
-        access_token = create_access_token(identity={
-            "user_email": user_email,
-        })
+        access_token = create_access_token(identity=user_email)
 
         return jsonify({
             "message": "Login successful",
@@ -153,6 +157,12 @@ def login():
     finally:
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
+
+@app.get("/profile")
+@jwt_required()
+def profile():
+    current_user = get_jwt_identity()
+    return jsonify({"user": current_user}), 200
 
 ##############################
 @app.get("/verify/<key>")
@@ -182,6 +192,34 @@ def verify_account(key):
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
 
+##############################
+@app.post("/logout")
+@jwt_required()
+def logout():
+    return jsonify({"message": "Logout successful"}), 200
+
+##############################
+@app.delete("/delete-account/<user_pk>")
+@jwt_required()
+def delete_account(user_pk):
+    try:
+        db, cursor = x.db()
+        user_email = get_jwt_identity()
+        q = "DELETE FROM users WHERE user_pk = %s"
+        cursor.execute(q, (user_pk,))
+        db.commit()
+
+        if cursor.rowcount == 0:
+            return "User not found", 404
+
+        return "Account deleted", 200
+
+    except Exception as ex:
+        ic(ex)
+        return str(ex), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
 
 ##############################
 @app.get("/forgot-password")
@@ -267,10 +305,10 @@ def reset_password():
         if cursor.rowcount == 0:
             return "Invalid key", 400
 
-        reset_key = x.validate_uuid4_paranoia(request.form.get("reset_key", ""))
+        return "Password changed, please login"
 
-        return "Agangskode ændret, vær venlig at logge ind"
     except Exception as ex:
+        ic(ex)
 
         if "company_exception user_password" in str(ex):
             return f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters", 400
@@ -282,8 +320,6 @@ def reset_password():
     finally:
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
-
-
 
 
 ##############################
