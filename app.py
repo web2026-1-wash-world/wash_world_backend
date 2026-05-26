@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 import uuid
 import time
@@ -181,7 +181,7 @@ def verify_account(key):
         if cursor.rowcount == 0:
             return "user already verified"
 
-        return f"Welcome to the system, you are verified"
+        return redirect(f"http://localhost:3000/login")
     except Exception as ex: 
         ic(ex)
         if "company_exception uuid4 invalid" in str(ex):
@@ -222,34 +222,39 @@ def delete_account(user_pk):
         if "db" in locals(): db.close()
 
 ##############################
-@app.get("/forgot-password")
-def show_forgot_password():
-    return render_template("/page_forgot_password.html")
-
-##############################
 @app.post("/forgot-password")
 def forgot_password():
     try:
-        user_email = x.validate_user_email(request.form.get("user_email", ""))
+        data = request.get_json()
+
+        user_email = x.validate_user_email(data.get("user_email", ""))
+
         db, cursor = x.db()
-        q = "SELECT user_reset_password_key AS 'reset_key' FROM users WHERE user_email = %s"
+
+        q = "SELECT user_reset_password_key AS reset_key FROM users WHERE user_email = %s"
         cursor.execute(q, (user_email,))
         row = cursor.fetchone()
 
         if not row:
-            return "Email not found", 400
+            return {"error": "Email not found"}, 400
 
-        html_forgot_password = render_template("/email_forgot_password.html", user_reset_password_key=row["reset_key"])
+        html_forgot_password = render_template(
+            "email_forgot_password.html",
+            user_reset_password_key=row["reset_key"]
+        )
 
         x.send_email("Reset your password", html_forgot_password)
 
-        return "Check your email"
+        return {"message": "Check your email"}, 200
 
     except Exception as ex:
         ic(ex)
 
-        if "company_exception email" in str(ex):
-            return "invalid email", 400
+        if "company_exception user_email" in str(ex):
+            return {"error": "invalid email"}, 400
+
+        return {"error": "server error"}, 500
+
     finally:
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
@@ -268,7 +273,7 @@ def show_reset_password(reset_key):
         if not row:
             return "ups...", 400
 
-        return render_template("/page_reset_password.html", reset_key=reset_key)
+        return redirect(f"http://localhost:3000/reset-password/{reset_key}")
 
     except Exception as ex: 
         ic(ex)
@@ -284,12 +289,14 @@ def show_reset_password(reset_key):
 @app.post("/reset-password")
 def reset_password():
     try:
-        password = x.validate_user_password( request.form.get("password", ""))
-        confirm_password = request.form.get("confirm-password", "").strip()
+        data = request.get_json()
+
+        password = x.validate_user_password( data.get("user_password", ""))
+        confirm_password = x.validate_user_password(data.get("confirm_password", ""))
         if confirm_password != password:
             return "Passwords do not match", 400
 
-        key = x.validate_uuid4_paranoia( request.form.get("key", ""))
+        key = x.validate_uuid4_paranoia( data.get("reset_key", ""))
         user_hashed_password = generate_password_hash(password)
         new_reset_password_key = uuid.uuid4().hex + uuid.uuid4().hex
 
@@ -305,7 +312,7 @@ def reset_password():
         if cursor.rowcount == 0:
             return "Invalid key", 400
 
-        return "Password changed, please login"
+        return redirect(f"http://localhost:3000/login")
 
     except Exception as ex:
         ic(ex)
