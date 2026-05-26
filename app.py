@@ -77,20 +77,20 @@ def sign_up():
 
         x.send_email("Activate your account", activation_email)
 
-        return "We have sent a confirmation email to your account", 201
+        return jsonify({"message": "We have sent a confirmation email to your account"}), 201
     except Exception as ex:
         ic(ex)
         if "company_exception user_first_name" in str(ex):
-            return f"First name must be between {x.USER_FIRST_NAME_MIN} and {x.USER_FIRST_NAME_MAX} characters", 400
+            return jsonify({"error": f"Fornavn skal være mellem {x.USER_FIRST_NAME_MIN} og {x.USER_FIRST_NAME_MAX} bogstaver"}), 400
             
         if "company_exception user_last_name" in str(ex):
-            return f"Last name must be between {x.USER_LAST_NAME_MIN} and {x.USER_LAST_NAME_MAX} characters", 400
+            return jsonify({"error": f"Efternavn skal være mellem {x.USER_LAST_NAME_MIN} og {x.USER_LAST_NAME_MAX} bogstaver"}), 400
 
         if "company_exception user_email" in str(ex):
-            return "Invalid Email", 400
+            return jsonify({"error":"Ugyldig email"}), 400
 
         if "company_exception user_password" in str(ex):
-            return f"At least {x.USER_PASSWORD_MIN} characters", 400
+            return jsonify({"error" : f"Adgangskoden skal minimum være {x.USER_PASSWORD_MIN} tegn"}), 400
 
         return str(ex), 500
     finally:
