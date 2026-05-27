@@ -42,12 +42,6 @@ def distance(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
     return R * c
-##########################################################
-
-##############################
-@app.get("/sign-up")
-def show_sign_up():
-    return render_template("/page_sign_up.html")
 
 ##############################
 @app.post("/sign-up")
@@ -81,16 +75,28 @@ def sign_up():
     except Exception as ex:
         ic(ex)
         if "company_exception user_first_name" in str(ex):
-            return jsonify({"error": f"Fornavn skal være mellem {x.USER_FIRST_NAME_MIN} og {x.USER_FIRST_NAME_MAX} bogstaver"}), 400
+            return jsonify({
+                "field" : "user_first_name",
+                "error": f"Fornavn skal være mellem {x.USER_FIRST_NAME_MIN} og {x.USER_FIRST_NAME_MAX} tegn"
+                }), 400
             
         if "company_exception user_last_name" in str(ex):
-            return jsonify({"error": f"Efternavn skal være mellem {x.USER_LAST_NAME_MIN} og {x.USER_LAST_NAME_MAX} bogstaver"}), 400
+            return jsonify({
+                "field" : "user_last_name",
+                "error": f"Efternavn skal være mellem {x.USER_LAST_NAME_MIN} og {x.USER_LAST_NAME_MAX} tegn"
+                }), 400
 
         if "company_exception user_email" in str(ex):
-            return jsonify({"error":"Ugyldig email"}), 400
+            return jsonify({
+                "field" : "user_email",
+                "error":"Ugyldig email"
+                }), 400
 
         if "company_exception user_password" in str(ex):
-            return jsonify({"error" : f"Adgangskoden skal minimum være {x.USER_PASSWORD_MIN} tegn"}), 400
+            return jsonify({
+                "field" : "user_password",
+                "error" : f"Adgangskoden skal minimum være {x.USER_PASSWORD_MIN} tegn"
+                }), 400
 
         return str(ex), 500
     finally:
@@ -239,7 +245,10 @@ def forgot_password():
         row = cursor.fetchone()
 
         if not row:
-            return {"error": "Email not found"}, 400
+            return jsonify({
+                "field" : "user_email",
+                "error": "Email not found"
+                }), 400
 
         html_forgot_password = render_template(
             "email_forgot_password.html",
@@ -254,7 +263,10 @@ def forgot_password():
         ic(ex)
 
         if "company_exception user_email" in str(ex):
-            return jsonify({"error": "invalid email"}), 400
+            return jsonify({
+                "field" : "user_email",
+                "error": "invalid email"
+                }), 400
 
         return {"error": "server error"}, 500
 
@@ -297,7 +309,10 @@ def reset_password():
         password = x.validate_user_password( data.get("user_password", ""))
         confirm_password = x.validate_user_password(data.get("confirm_password", ""))
         if confirm_password != password:
-            return jsonify({"error" : "Passwords do not match"}), 400
+            return jsonify({
+                "field" : "confirm_password",
+                "error" : "Passwords do not match"
+                }), 400
 
         key = x.validate_uuid4_paranoia( data.get("reset_key", ""))
         user_hashed_password = generate_password_hash(password)
@@ -321,7 +336,10 @@ def reset_password():
         ic(ex)
 
         if "company_exception user_password" in str(ex):
-            return jsonify({"error": f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters"}), 400
+            return jsonify({
+                "field" : "user_password",
+                "error": f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters"
+                }), 400
 
         if "company_exception paranoia" in str(ex):
             return "Invalid key", 400
