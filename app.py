@@ -326,9 +326,28 @@ def reset_password():
 def get_stations():
     try:
         db, cursor = x.db()
-        q = "SELECT name FROM stations"
+        q = """
+            SELECT
+                station_pk,
+                name,
+                latitude,
+                longitude
+            FROM stations
+        """
         cursor.execute(q)
-        stations = cursor.fetchall()
+        rows = cursor.fetchall()
+
+        stations = []
+
+        for row in rows:
+            stations.append({
+                "id": row["station_pk"],
+                "name": row["name"],
+                "position": [
+                    float(row["latitude"]),
+                    float(row["longitude"])
+                ]
+            })
 
         return jsonify(stations), 200
     except Exception as ex:
