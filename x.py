@@ -128,3 +128,30 @@ def send_email(subject, activation_email):
         return "cannot send email", 500
     finally:
         pass
+
+##############################
+CAR_LICENSE_PLATE_MIN = 2
+CAR_LICENSE_PLATE_MAX = 7
+REGEX_CAR_LICENSE_PLATE = f"^.{{{CAR_LICENSE_PLATE_MIN},{CAR_LICENSE_PLATE_MAX}}}$"
+def validate_car_license_plate(car_license_plate):
+    if not re.match(REGEX_CAR_LICENSE_PLATE, car_license_plate):
+        raise Exception("company_exception car_license_plate ")
+    return car_license_plate
+
+##############################
+CAR_BRAND_MIN = 2
+CAR_BRAND_MAX = 20
+REGEX_CAR_BRAND = f"^.{{{CAR_BRAND_MIN},{CAR_BRAND_MAX}}}$"
+def validate_car_brand(car_brand):
+    if not re.match(REGEX_CAR_BRAND, car_brand):
+        raise Exception("company_exception car_brand")
+    return car_brand
+
+##############################
+CAR_MODEL_MIN = 2
+CAR_MODEL_MAX = 65
+REGEX_CAR_MODEL = f"^.{{{CAR_MODEL_MIN},{CAR_MODEL_MAX}}}$"
+def validate_car_model(car_model):
+    if not re.match(REGEX_CAR_MODEL, car_model):
+        raise Exception ("company_exception car_model")
+    return car_model
