@@ -111,7 +111,7 @@ def login():
         data = request.get_json()
 
         user_email = x.validate_user_email(data.get("user_email", "") )
-        user_password = x.validate_user_password(data.form.get("user_password", ""))
+        user_password = x.validate_user_password(data.get("user_password", ""))
 
         db, cursor = x.db()
         q = """
