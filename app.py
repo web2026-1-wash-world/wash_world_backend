@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required
 import uuid
 import time
@@ -9,7 +9,7 @@ from werkzeug.security import check_password_hash
 import x
 
 from icecream import ic
-ic.configureOutput(prefix=f"_____ | ", includeContext=True)
+ic.configureOutput(prefix=f"___ | ", includeContext=True)
 
 app = Flask(__name__)
 app.json.ensure_ascii = False # Denne linje viser ÆØÅ i JSON svar, ellers bliver de til unicode
@@ -42,12 +42,6 @@ def distance(lat1, lon1, lat2, lon2):
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
 
     return R * c
-##########################################################
-
-##############################
-@app.get("/sign-up")
-def show_sign_up():
-    return render_template("/page_sign_up.html")
 
 ##############################
 @app.post("/sign-up")
@@ -75,22 +69,34 @@ def sign_up():
 
         activation_email = render_template("email_welcome.html", user_verification_key=user_verification_key)
 
-        x.send_email("Activate your account", activation_email)
+        x.send_email("Verificer din profil", activation_email)
 
-        return "We have sent a confirmation email to your account", 201
+        return jsonify({"message": "Vi har sendt en verificerings-email"}), 201
     except Exception as ex:
         ic(ex)
         if "company_exception user_first_name" in str(ex):
-            return f"First name must be between {x.USER_FIRST_NAME_MIN} and {x.USER_FIRST_NAME_MAX} characters", 400
+            return jsonify({
+                "field" : "user_first_name",
+                "error": f"Fornavn skal være mellem {x.USER_FIRST_NAME_MIN} og {x.USER_FIRST_NAME_MAX} tegn"
+                }), 400
             
         if "company_exception user_last_name" in str(ex):
-            return f"Last name must be between {x.USER_LAST_NAME_MIN} and {x.USER_LAST_NAME_MAX} characters", 400
+            return jsonify({
+                "field" : "user_last_name",
+                "error": f"Efternavn skal være mellem {x.USER_LAST_NAME_MIN} og {x.USER_LAST_NAME_MAX} tegn"
+                }), 400
 
         if "company_exception user_email" in str(ex):
-            return "Invalid Email", 400
+            return jsonify({
+                "field" : "user_email",
+                "error":"Ugyldig email"
+                }), 400
 
         if "company_exception user_password" in str(ex):
-            return f"At least {x.USER_PASSWORD_MIN} characters", 400
+            return jsonify({
+                "field" : "user_password",
+                "error" : f"Adgangskoden skal minimum være {x.USER_PASSWORD_MIN} tegn"
+                }), 400
 
         return str(ex), 500
     finally:
@@ -102,8 +108,10 @@ def sign_up():
 @app.post("/login")
 def login():
     try:
-        user_email = x.validate_user_email(request.form.get("user_email", "") )
-        user_password = x.validate_user_password(request.form.get("user_password", ""))
+        data = request.get_json()
+
+        user_email = x.validate_user_email(data.get("user_email", "") )
+        user_password = x.validate_user_password(data.get("user_password", ""))
 
         db, cursor = x.db()
         q = """
@@ -158,6 +166,7 @@ def login():
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
 
+##############################
 @app.get("/profile")
 @jwt_required()
 def profile():
@@ -181,7 +190,7 @@ def verify_account(key):
         if cursor.rowcount == 0:
             return "user already verified"
 
-        return f"Welcome to the system, you are verified"
+        return redirect(f"http://localhost:3000/login")
     except Exception as ex: 
         ic(ex)
         if "company_exception uuid4 invalid" in str(ex):
@@ -222,34 +231,45 @@ def delete_account(user_pk):
         if "db" in locals(): db.close()
 
 ##############################
-@app.get("/forgot-password")
-def show_forgot_password():
-    return render_template("/page_forgot_password.html")
-
-##############################
 @app.post("/forgot-password")
 def forgot_password():
     try:
-        user_email = x.validate_user_email(request.form.get("user_email", ""))
+        data = request.get_json()
+
+        user_email = x.validate_user_email(data.get("user_email", ""))
+
         db, cursor = x.db()
-        q = "SELECT user_reset_password_key AS 'reset_key' FROM users WHERE user_email = %s"
+
+        q = "SELECT user_reset_password_key AS reset_key FROM users WHERE user_email = %s"
         cursor.execute(q, (user_email,))
         row = cursor.fetchone()
 
         if not row:
-            return "Email not found", 400
+            return jsonify({
+                "field" : "user_email",
+                "error": "Email not found"
+                }), 400
 
-        html_forgot_password = render_template("/email_forgot_password.html", user_reset_password_key=row["reset_key"])
+        html_forgot_password = render_template(
+            "email_forgot_password.html",
+            user_reset_password_key=row["reset_key"]
+        )
 
         x.send_email("Reset your password", html_forgot_password)
 
-        return "Check your email"
+        return jsonify({"message": "Check your email"}), 200
 
     except Exception as ex:
         ic(ex)
 
-        if "company_exception email" in str(ex):
-            return "invalid email", 400
+        if "company_exception user_email" in str(ex):
+            return jsonify({
+                "field" : "user_email",
+                "error": "invalid email"
+                }), 400
+
+        return {"error": "server error"}, 500
+
     finally:
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
@@ -268,7 +288,7 @@ def show_reset_password(reset_key):
         if not row:
             return "ups...", 400
 
-        return render_template("/page_reset_password.html", reset_key=reset_key)
+        return redirect(f"http://localhost:3000/reset-password/{reset_key}")
 
     except Exception as ex: 
         ic(ex)
@@ -284,12 +304,17 @@ def show_reset_password(reset_key):
 @app.post("/reset-password")
 def reset_password():
     try:
-        password = x.validate_user_password( request.form.get("password", ""))
-        confirm_password = request.form.get("confirm-password", "").strip()
-        if confirm_password != password:
-            return "Passwords do not match", 400
+        data = request.get_json()
 
-        key = x.validate_uuid4_paranoia( request.form.get("key", ""))
+        password = x.validate_user_password( data.get("user_password", ""))
+        confirm_password = x.validate_user_password(data.get("confirm_password", ""))
+        if confirm_password != password:
+            return jsonify({
+                "field" : "confirm_password",
+                "error" : "Passwords do not match"
+                }), 400
+
+        key = x.validate_uuid4_paranoia( data.get("reset_key", ""))
         user_hashed_password = generate_password_hash(password)
         new_reset_password_key = uuid.uuid4().hex + uuid.uuid4().hex
 
@@ -303,15 +328,18 @@ def reset_password():
         db.commit()
 
         if cursor.rowcount == 0:
-            return "Invalid key", 400
+            return jsonify({"Invalid key"}), 400
 
-        return "Password changed, please login"
+        return redirect(f"http://localhost:3000/login")
 
     except Exception as ex:
         ic(ex)
 
         if "company_exception user_password" in str(ex):
-            return f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters", 400
+            return jsonify({
+                "field" : "user_password",
+                "error": f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters"
+                }), 400
 
         if "company_exception paranoia" in str(ex):
             return "Invalid key", 400
@@ -327,28 +355,9 @@ def reset_password():
 def get_stations():
     try:
         db, cursor = x.db()
-        q = """
-            SELECT
-                station_pk,
-                name,
-                latitude,
-                longitude
-            FROM stations
-        """
+        q = "SELECT name FROM stations"
         cursor.execute(q)
-        rows = cursor.fetchall()
-
-        stations = []
-
-        for row in rows:
-            stations.append({
-                "id": row["station_pk"],
-                "name": row["name"],
-                "position": [
-                    float(row["latitude"]),
-                    float(row["longitude"])
-                ]
-            })
+        stations = cursor.fetchall()
 
         return jsonify(stations), 200
     except Exception as ex:
@@ -413,8 +422,11 @@ def get_nearby_stations():
         return str(ex), 500
 
     finally:
-        if "cursor" in locals(): cursor.close()
-        if "db" in locals(): db.close()
+        if "cursor" in locals():
+            cursor.close()
+
+        if "db" in locals():
+            db.close()
 
 # ##############################
 # @app.get("/stations/<station_pk>/availability") NICE TO HAVE - IKKE ET MUST?
@@ -486,24 +498,7 @@ def get_user_subscription(user_pk):
         user_email = get_jwt_identity()
 
         db, cursor = x.db()
-        q = """
-        SELECT
-        memberships.name,
-        memberships.price_per_month,
-        user_memberships.status
-
-        FROM users
-
-        JOIN user_memberships
-        ON users.user_pk = user_memberships.user_id
-
-        JOIN memberships
-        ON memberships.membership_pk = user_memberships.membership_id
-
-        WHERE users.user_email = %s
-
-        LIMIT 1
-        """
+        q = """ SELECT memberships.name, memberships.price_per_month, user_memberships.status FROM users JOIN user_memberships ON users.user_pk = user_memberships.user_id JOIN memberships ON memberships.membership_pk = user_memberships.membership_id WHERE users.user_email = %s LIMIT 1 """
 
         cursor.execute(q, (user_email,))
         membership = cursor.fetchone()
@@ -555,7 +550,10 @@ def cancel_subscription(user_membership_pk):
     try:
         
         db, cursor = x.db()
-        q = """UPDATE user_memberships SET status = 'cancelled' WHERE user_membership_pk = %s"""
+
+        ##??? q = """UPDATE user_memberships SET status = 'cancelled' WHERE user_membership_pk = %s"""
+
+        cursor.execute("SELECT user_memberships FROM users WHERE user_email = %s"),
         cursor.execute(q, (user_membership_pk,))
         db.commit()
 
