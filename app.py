@@ -401,3 +401,319 @@ def get_nearby_stations():
 
 # ##############################
 # @app.get("/stations/<station_pk>/availability") NICE TO HAVE - IKKE ET MUST?
+
+##############################
+@app.post("/cars")
+@jwt_required()
+def api_create_cars():
+    try:
+        user_email = get_jwt_identity()
+        # data = request.get_json()
+        car_pk = uuid.uuid4().hex
+        car_license_plate = x.validate_car_license_plate(request.form.get("car_license_plate", ""))
+        car_brand = x.validate_car_brand(request.form.get("car_brand", ""))
+        car_model = x.validate_car_model(request.form.get("car_model", ""))
+        user_created_at = int(time.time())
+        user_updated_at = int(time.time()) 
+
+        db, cursor = x.db()
+        cursor.execute("SELECT user_pk FROM users WHERE user_email = %s", (user_email,))
+        user = cursor.fetchone()
+        if not user: 
+            return jsonify({"error": "User not found"}), 404                                                            
+        q = "INSERT INTO cars (car_pk, user_id, car_license_plate, car_brand, car_model, car_created_at, car_updated_at) VALUES (%s, %s, %s, %s, %s, %s, %s)"                                                       
+        cursor.execute(q, (car_pk, user["user_pk"], car_license_plate, car_brand, car_model, user_created_at, user_updated_at))  
+        db.commit()                                                                                        
+        return jsonify({"car_pk": car_pk}), 201  
+    except Exception as ex: 
+        ic(ex)                                                                                             
+        if "company_exception car_license_plate" in str(ex):                                             
+            return f"License plate must be {x.CAR_LICENSE_PLATE_MIN}-{x.CAR_LICENSE_PLATE_MAX} characters", 400                                                                                                      
+        if "company_exception car_brand" in str(ex):
+            return f"Brand must be {x.CAR_BRAND_MIN}-{x.CAR_BRAND_MAX} characters", 400                    
+        if "company_exception car_model" in str(ex):                                                       
+            return f"Model must be {x.CAR_MODEL_MIN}-{x.CAR_MODEL_MAX} characters", 400
+        return str(ex), 500                                                                                
+    finally:                                                                                             
+        if "cursor" in locals(): cursor.close()                                                            
+        if "db" in locals(): db.close()  
+
+
+##############################
+@app.get("/cars")
+@jwt_required()
+def get_cars():
+    try:
+        user_email = get_jwt_identity()
+        db, cursor = x.db()
+        cursor.execute("SELECT user_pk FROM users WHERE user_email = %s", (user_email,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        q = "SELECT * FROM cars WHERE user_id = %s"
+        cursor.execute(q, (user["user_pk"],))
+        cars = cursor.fetchall()
+        return jsonify(cars), 200
+    except Exception as ex:
+        ic(ex)
+        return jsonify({"error": "System under maintenance"}), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
+@app.get("/cars/<car_pk>")
+@jwt_required()
+def get_car(car_pk):
+  try:
+      user_email = get_jwt_identity()
+      db, cursor = x.db()
+      cursor.execute("SELECT user_pk FROM users WHERE user_email = %s", (user_email,))
+      user = cursor.fetchone()
+      if not user:
+          return jsonify({"error": "User not found"}), 404
+      cursor.execute("SELECT * FROM cars WHERE car_pk = %s AND user_id = %s", (car_pk, user["user_pk"]))
+      car = cursor.fetchone()
+      if not car:
+          return jsonify({"error": "Car not found"}), 404
+      return jsonify(car), 200
+  except Exception as ex:
+      ic(ex)
+      return jsonify({"error": "System under maintenance"}), 500
+  finally:
+      if "cursor" in locals(): cursor.close()
+      if "db" in locals(): db.close()
+
+##############################
+@app.patch("/cars/<car_pk>")
+@jwt_required()
+def update_car(car_pk):
+    try:
+        parts = []
+        values = []
+
+        car_license_plate = request.form.get("car_license_plate", "").strip()
+        if car_license_plate:
+            parts.append("car_license_plate = %s")
+            values.append(x.validate_car_license_plate(car_license_plate))
+
+        car_brand = request.form.get("car_brand", "").strip()
+        if car_brand:
+            parts.append("car_brand = %s")
+            values.append(x.validate_car_brand(car_brand))
+
+        car_model = request.form.get("car_model", "").strip()
+        if car_model:
+            parts.append("car_model = %s")
+            values.append(x.validate_car_model(car_model))
+
+        if not parts:
+            return jsonify({"error": "No fields to update"}), 400
+
+        partial_query = ", ".join(parts)
+        values.append(car_pk)
+
+        db, cursor = x.db()
+        q = f"UPDATE cars SET {partial_query} WHERE car_pk = %s"
+        cursor.execute(q, values)
+        db.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Car not found"}), 404
+        return jsonify({"message": "Car updated"}), 200
+    except Exception as ex:
+        ic(ex)
+        if "company_exception car_license_plate" in str(ex):
+            return f"License plate must be {x.CAR_LICENSE_PLATE_MIN}-{x.CAR_LICENSE_PLATE_MAX} characters", 400
+        if "company_exception car_brand" in str(ex):
+            return f"Brand must be {x.CAR_BRAND_MIN}-{x.CAR_BRAND_MAX} characters", 400
+        if "company_exception car_model" in str(ex):
+            return f"Model must be {x.CAR_MODEL_MIN}-{x.CAR_MODEL_MAX} characters", 400
+        return jsonify({"error": "System under maintenance"}), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
+@app.delete("/cars/<car_pk>")
+@jwt_required()
+def delete_car(car_pk):
+    try:
+        user_email = get_jwt_identity()
+        db, cursor = x.db()
+        cursor.execute("SELECT user_pk FROM users WHERE user_email = %s", (user_email,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        q = "DELETE FROM cars WHERE car_pk = %s AND user_id = %s"
+        cursor.execute(q, (car_pk, user["user_pk"]))
+        db.commit()
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Car not found"}), 404
+        return "", 204
+    except Exception as ex:
+        ic(ex)
+        return jsonify({"error": "System under maintenance"}), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+        
+
+##############################
+@app.get("/memberships")
+def get_memberships():
+    try:
+        
+        db, cursor = x.db()
+        q = "SELECT membership_pk, name, price_per_month FROM memberships"
+        cursor.execute(q)
+        memberships = cursor.fetchall()
+
+        return jsonify(memberships), 200
+
+    except Exception as ex:
+        ic(ex)
+        return str(ex), 500
+    finally:
+        if "cursor" in locals():
+            cursor.close()
+
+        if "db" in locals():
+            db.close()
+
+##############################
+@app.post("/subscribe")
+@jwt_required()
+def subscribe_membership():
+    try:
+        
+        # data = request.get_json()
+        membership_id = request.form.get("membership_id")
+
+        if not membership_id:
+            return "membership_id is required", 400
+        
+        user_email = get_jwt_identity()
+
+        db, cursor = x.db()
+        q = "SELECT user_pk FROM users WHERE user_email = %s"
+        cursor.execute(q, (user_email,))
+        user = cursor.fetchone()
+
+        if not user:
+            return "User not found", 404
+
+        user_membership_pk = uuid.uuid4().hex
+        start_date = int(time.time())
+
+        q = """INSERT INTO user_memberships (user_membership_pk, user_id, membership_id, start_date, end_date, status) VALUES (%s, %s, %s, %s, %s, %s)"""
+        cursor.execute(q, (user_membership_pk, user["user_pk"], membership_id, start_date, None, "active"))
+
+        db.commit()
+
+        return jsonify({"message": "Subscription successful"}), 200
+
+    except Exception as ex:
+        ic(ex)
+        return str(ex), 500
+    finally:
+        if "cursor" in locals():
+            cursor.close()
+
+        if "db" in locals():
+            db.close()
+
+###############################
+@app.get("/users/<user_pk>/memberships")
+@jwt_required()
+def get_user_subscription(user_pk):
+    try:
+        
+        user_email = get_jwt_identity()
+
+        db, cursor = x.db()
+        q = """ SELECT memberships.name, memberships.price_per_month, user_memberships.status FROM users JOIN user_memberships ON users.user_pk = user_memberships.user_id JOIN memberships ON memberships.membership_pk = user_memberships.membership_id WHERE users.user_email = %s LIMIT 1 """
+
+        cursor.execute(q, (user_email,))
+        membership = cursor.fetchone()
+
+        if not membership:
+            return "No active subscription found", 404
+
+        return jsonify(membership), 200
+
+    except Exception as ex:
+        ic(ex)
+        return str(ex), 500
+    finally:
+        if "cursor" in locals():
+            cursor.close()
+
+        if "db" in locals():
+            db.close()
+
+###############################
+@app.patch("/change-membership/<user_membership_pk>")
+def change_membership(user_membership_pk):
+    try:
+        
+        # data = request.get_json()
+
+        membership_id = request.form.get("membership_id")
+
+        if not membership_id:
+            return "membership_id is required", 400
+        
+        db,cursor = x.db()
+        q = """ UPDATE user_memberships SET membership_id = %s WHERE user_membership_pk = %s """
+        cursor.execute(q, (membership_id, user_membership_pk))
+        db.commit()
+
+        if cursor.rowcount == 0:
+            return "Subscription not found", 404
+
+        return jsonify({"message": "Subscription updated"}), 200
+
+    except Exception as ex:
+        ic(ex)
+        return str(ex), 500
+    finally:
+        if "cursor" in locals():
+            cursor.close()
+
+        if "db" in locals():
+            db.close()
+
+##############################
+@app.post("/washes")
+@jwt_required()
+def washes():
+    try:
+        user_email = get_jwt_identity()
+        wash_pk = uuid.uuid4().hex
+        car_id = x.validate_uuid4(request.form.get("car_id", ""))
+        station_id = int(request.form.get("station_id", 0))
+        created_at = int(time.time())
+
+        db, cursor = x.db()
+        cursor.execute("SELECT user_pk FROM users WHERE user_email = %s", (user_email,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        cursor.execute("SELECT car_pk FROM cars WHERE car_pk = %s AND user_id = %s", (car_id, user["user_pk"]))
+        if not cursor.fetchone():
+            return jsonify({"error": "Car not found"}), 404
+
+        q = "INSERT INTO washes (wash_pk, user_id, car_id, station_id, created_at) VALUES (%s, %s, %s, %s, %s)"
+        cursor.execute(q, (wash_pk, user["user_pk"], car_id, station_id, created_at))
+        db.commit()
+
+        return jsonify({"wash_pk": wash_pk}), 201
+
+    except Exception as ex:
+        ic(ex)
+        return jsonify({"error": "System under maintenance"}), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
