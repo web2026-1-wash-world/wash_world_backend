@@ -517,6 +517,7 @@ def get_user_subscription(user_pk):
 
 ###############################
 @app.patch("/user-membership/<user_membership_pk>")
+@jwt_required()
 def change_membership(user_membership_pk):
     try:
         
@@ -546,6 +547,7 @@ def change_membership(user_membership_pk):
 
 ################################
 @app.delete("/user-membership/<user_membership_pk>")
+@jwt_required()
 def cancel_subscription(user_membership_pk):
     try:
         
