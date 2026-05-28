@@ -327,14 +327,7 @@ def reset_password():
 def get_stations():
     try:
         db, cursor = x.db()
-        q = """
-            SELECT
-                station_pk,
-                name,
-                latitude,
-                longitude
-            FROM stations
-        """
+        q = """ SELECT station_pk,name, latitude, longitude FROM stations """
         cursor.execute(q)
         rows = cursor.fetchall()
 
@@ -486,24 +479,7 @@ def get_user_subscription(user_pk):
         user_email = get_jwt_identity()
 
         db, cursor = x.db()
-        q = """
-        SELECT
-        memberships.name,
-        memberships.price_per_month,
-        user_memberships.status
-
-        FROM users
-
-        JOIN user_memberships
-        ON users.user_pk = user_memberships.user_id
-
-        JOIN memberships
-        ON memberships.membership_pk = user_memberships.membership_id
-
-        WHERE users.user_email = %s
-
-        LIMIT 1
-        """
+        q = """ SELECT memberships.name, memberships.price_per_month, user_memberships.status FROM users JOIN user_memberships ON users.user_pk = user_memberships.user_id JOIN memberships ON memberships.membership_pk = user_memberships.membership_id WHERE users.user_email = %s LIMIT 1 """
 
         cursor.execute(q, (user_email,))
         membership = cursor.fetchone()
@@ -555,7 +531,10 @@ def cancel_subscription(user_membership_pk):
     try:
         
         db, cursor = x.db()
-        q = """UPDATE user_memberships SET status = 'cancelled' WHERE user_membership_pk = %s"""
+
+        ##??? q = """UPDATE user_memberships SET status = 'cancelled' WHERE user_membership_pk = %s"""
+
+        cursor.execute("SELECT user_memberships FROM users WHERE user_email = %s",
         cursor.execute(q, (user_membership_pk,))
         db.commit()
 
