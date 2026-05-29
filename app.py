@@ -594,12 +594,21 @@ def api_create_cars():
         return jsonify({"car_pk": car_pk}), 201  
     except Exception as ex: 
         ic(ex)                                                                                             
-        if "company_exception car_license_plate" in str(ex):                                             
-            return f"License plate must be {x.CAR_LICENSE_PLATE_MIN}-{x.CAR_LICENSE_PLATE_MAX} characters", 400                                                                                                      
+        if "company_exception car_license_plate" in str(ex):
+            return jsonify({
+                "field": "car_license_plate",
+                "error": f"Nummerplade skal være mellem {x.CAR_LICENSE_PLATE_MIN} og {x.CAR_LICENSE_PLATE_MAX} tegn"
+            }), 400
         if "company_exception car_brand" in str(ex):
-            return f"Brand must be {x.CAR_BRAND_MIN}-{x.CAR_BRAND_MAX} characters", 400                    
-        if "company_exception car_model" in str(ex):                                                       
-            return f"Model must be {x.CAR_MODEL_MIN}-{x.CAR_MODEL_MAX} characters", 400
+            return jsonify({
+                "field": "car_brand",
+                "error": f"Mærke skal være mellem {x.CAR_BRAND_MIN} og {x.CAR_BRAND_MAX} tegn"
+            }), 400
+        if "company_exception car_model" in str(ex):
+            return jsonify({
+                "field": "car_model",
+                "error": f"Model skal være mellem {x.CAR_MODEL_MIN} og {x.CAR_MODEL_MAX} tegn"
+            }), 400
         return str(ex), 500                                                                                
     finally:                                                                                             
         if "cursor" in locals(): cursor.close()                                                            
