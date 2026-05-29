@@ -355,7 +355,7 @@ def reset_password():
 def get_stations():
     try:
         db, cursor = x.db()
-        q = "SELECT name FROM stations"
+        q = "SELECT station_pk, name, latitude, longitude FROM stations"
         cursor.execute(q)
         stations = cursor.fetchall()
 
