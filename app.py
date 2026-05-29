@@ -47,7 +47,7 @@ def distance(lat1, lon1, lat2, lon2):
 @app.post("/sign-up")
 def sign_up():
     try:
-        data = request.get_json()
+        data = request.form
         
         user_pk = uuid.uuid4().hex
         user_first_name = x.validate_user_first_name(data.get("user_first_name", ""))
@@ -108,7 +108,7 @@ def sign_up():
 @app.post("/login")
 def login():
     try:
-        data = request.get_json()
+        data = request.form
 
         user_email = x.validate_user_email(data.get("user_email", "") )
         user_password = x.validate_user_password(data.get("user_password", ""))
@@ -234,7 +234,7 @@ def delete_account(user_pk):
 @app.post("/forgot-password")
 def forgot_password():
     try:
-        data = request.get_json()
+        data = request.form
 
         user_email = x.validate_user_email(data.get("user_email", ""))
 
@@ -304,7 +304,7 @@ def show_reset_password(reset_key):
 @app.post("/reset-password")
 def reset_password():
     try:
-        data = request.get_json()
+        data = request.form
 
         password = x.validate_user_password( data.get("user_password", ""))
         confirm_password = x.validate_user_password(data.get("confirm_password", ""))
@@ -456,7 +456,7 @@ def get_memberships():
 def subscribe_membership():
     try:
         
-        data = request.get_json()
+        data = request.form
         membership_id = data.get("membership_id")
 
         if not membership_id:
@@ -626,7 +626,7 @@ def cancel_membership():
 def api_create_cars():
     try:
         user_email = get_jwt_identity()
-        # data = request.get_json()
+        # data = request.form
         car_pk = uuid.uuid4().hex
         car_license_plate = x.validate_car_license_plate(request.form.get("car_license_plate", ""))
         car_brand = x.validate_car_brand(request.form.get("car_brand", ""))
