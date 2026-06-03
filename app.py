@@ -47,7 +47,7 @@ def distance(lat1, lon1, lat2, lon2):
 @app.post("/sign-up")
 def sign_up():
     try:
-        data = request.get_json()
+        data = request.form
         
         user_pk = uuid.uuid4().hex
         user_first_name = x.validate_user_first_name(data.get("user_first_name", ""))
@@ -108,7 +108,7 @@ def sign_up():
 @app.post("/login")
 def login():
     try:
-        data = request.get_json()
+        data = request.form
 
         user_email = x.validate_user_email(data.get("user_email", "") )
         user_password = x.validate_user_password(data.get("user_password", ""))
@@ -234,7 +234,7 @@ def delete_account(user_pk):
 @app.post("/forgot-password")
 def forgot_password():
     try:
-        data = request.get_json()
+        data = request.form
 
         user_email = x.validate_user_email(data.get("user_email", ""))
 
@@ -304,7 +304,7 @@ def show_reset_password(reset_key):
 @app.post("/reset-password")
 def reset_password():
     try:
-        data = request.get_json()
+        data = request.form
 
         password = x.validate_user_password( data.get("user_password", ""))
         confirm_password = x.validate_user_password(data.get("confirm_password", ""))
@@ -355,7 +355,7 @@ def reset_password():
 def get_stations():
     try:
         db, cursor = x.db()
-        q = "SELECT name FROM stations"
+        q = "SELECT station_pk, name, latitude, longitude FROM stations"
         cursor.execute(q)
         stations = cursor.fetchall()
 
@@ -456,7 +456,7 @@ def get_memberships():
 def subscribe_membership():
     try:
         
-        data = request.get_json()
+        data = request.form
         membership_id = data.get("membership_id")
 
         if not membership_id:
@@ -472,15 +472,71 @@ def subscribe_membership():
         if not user:
             return "User not found", 404
 
-        user_membership_pk = uuid.uuid4().hex
-        start_date = int(time.time())
+        # Check if user already has an active membership
+        q = """
+            SELECT user_membership_pk
+            FROM user_memberships
+            WHERE user_id = %s
+            AND status = 'active'
+            LIMIT 1
+        """
+        cursor.execute(q, (user["user_pk"],))
+        existing_membership = cursor.fetchone()
 
-        q = """INSERT INTO user_memberships (user_membership_pk, user_id, membership_id, start_date, end_date, status) VALUES (%s, %s, %s, %s, %s, %s)"""
-        cursor.execute(q, (user_membership_pk, user["user_pk"], membership_id, start_date, None, "active"))
+        if existing_membership:
+
+            # Update existing membership
+            q = """
+                UPDATE user_memberships
+                SET membership_id = %s
+                WHERE user_membership_pk = %s
+            """
+            cursor.execute(
+                q,
+                (
+                    membership_id,
+                    existing_membership["user_membership_pk"]
+                )
+            )
+
+            message = "Membership updated"
+
+        else:
+
+            # Create new membership
+            user_membership_pk = uuid.uuid4().hex
+            start_date = int(time.time())
+
+            q = """
+                INSERT INTO user_memberships
+                (
+                    user_membership_pk,
+                    user_id,
+                    membership_id,
+                    start_date,
+                    end_date,
+                    status
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """
+
+            cursor.execute(
+                q,
+                (
+                    user_membership_pk,
+                    user["user_pk"],
+                    membership_id,
+                    start_date,
+                    None,
+                    "active"
+                )
+            )
+
+            message = "Subscription successful"
 
         db.commit()
 
-        return jsonify({"message": "Subscription successful"}), 200
+        return jsonify({"message": message}), 200
 
     except Exception as ex:
         ic(ex)
@@ -490,21 +546,35 @@ def subscribe_membership():
         if "db" in locals(): db.close()
 
 ###############################
-@app.get("/users/<user_pk>/memberships")
+@app.get("/users/membership")
 @jwt_required()
-def get_user_subscription(user_pk):
+def get_user_subscription():
     try:
         
         user_email = get_jwt_identity()
 
         db, cursor = x.db()
-        q = """ SELECT memberships.name, memberships.price_per_month, user_memberships.status FROM users JOIN user_memberships ON users.user_pk = user_memberships.user_id JOIN memberships ON memberships.membership_pk = user_memberships.membership_id WHERE users.user_email = %s LIMIT 1 """
+        q = """
+        SELECT
+            memberships.membership_pk,
+            memberships.name,
+            memberships.price_per_month,
+            user_memberships.status
+        FROM users
+        JOIN user_memberships
+            ON users.user_pk = user_memberships.user_id
+        JOIN memberships
+            ON memberships.membership_pk = user_memberships.membership_id
+        WHERE users.user_email = %s
+        AND user_memberships.status = 'active'
+        LIMIT 1
+        """
 
         cursor.execute(q, (user_email,))
         membership = cursor.fetchone()
 
         if not membership:
-            return "No active subscription found", 404
+            return jsonify(None), 200
 
         return jsonify(membership), 200
 
@@ -516,50 +586,31 @@ def get_user_subscription(user_pk):
         if "db" in locals(): db.close()
 
 ###############################
-@app.patch("/user-membership/<user_membership_pk>")
-def change_membership(user_membership_pk):
+@app.patch("/user-membership")
+@jwt_required()
+def cancel_membership():
     try:
         
-        data = request.get_json()
+        user_email = get_jwt_identity()
 
-        membership_id = data.get("membership_id")
-
-        if not membership_id:
-            return "membership_id is required", 400
-        
-        db,cursor = x.db()
-        q = """ UPDATE user_memberships SET membership_id = %s WHERE user_membership_pk = %s """
-        cursor.execute(q, (membership_id, user_membership_pk))
-        db.commit()
-
-        if cursor.rowcount == 0:
-            return "Subscription not found", 404
-
-        return jsonify({"message": "Subscription updated"}), 200
-
-    except Exception as ex:
-        ic(ex)
-        return str(ex), 500
-    finally:
-        if "cursor" in locals():cursor.close()
-        if "db" in locals(): db.close()
-
-################################
-@app.delete("/user-membership/<user_membership_pk>")
-def cancel_subscription(user_membership_pk):
-    try:
-        
         db, cursor = x.db()
 
-        ##??? q = """UPDATE user_memberships SET status = 'cancelled' WHERE user_membership_pk = %s"""
+        q = "SELECT user_pk FROM users WHERE user_email = %s"
+        cursor.execute(q, (user_email,))
+        user = cursor.fetchone()
 
-        cursor.execute("SELECT user_memberships FROM users WHERE user_email = %s"),
-        cursor.execute(q, (user_membership_pk,))
+        if not user:
+            return "User not found", 404
+
+        q = """UPDATE user_memberships SET status = 'cancelled', end_date = %s WHERE user_id = %s AND status = 'active'"""
+
+        cursor.execute(q, (int(time.time()), user["user_pk"]))
+
         db.commit()
 
         if cursor.rowcount == 0:
-            return "Subscription not found", 404
-    
+            return "No active subscription found", 404
+
         return jsonify({"message": "Subscription cancelled"}), 200
 
     except Exception as ex:
@@ -575,7 +626,7 @@ def cancel_subscription(user_membership_pk):
 def api_create_cars():
     try:
         user_email = get_jwt_identity()
-        # data = request.get_json()
+        # data = request.form
         car_pk = uuid.uuid4().hex
         car_license_plate = x.validate_car_license_plate(request.form.get("car_license_plate", ""))
         car_brand = x.validate_car_brand(request.form.get("car_brand", ""))
@@ -594,16 +645,25 @@ def api_create_cars():
         return jsonify({"car_pk": car_pk}), 201  
     except Exception as ex: 
         ic(ex)                                                                                             
-        if "company_exception car_license_plate" in str(ex):                                             
-            return f"License plate must be {x.CAR_LICENSE_PLATE_MIN}-{x.CAR_LICENSE_PLATE_MAX} characters", 400                                                                                                      
+        if "company_exception car_license_plate" in str(ex):
+            return jsonify({
+                "field": "car_license_plate",
+                "error": f"Nummerplade skal være mellem {x.CAR_LICENSE_PLATE_MIN} og {x.CAR_LICENSE_PLATE_MAX} tegn"
+            }), 400
         if "company_exception car_brand" in str(ex):
-            return f"Brand must be {x.CAR_BRAND_MIN}-{x.CAR_BRAND_MAX} characters", 400                    
-        if "company_exception car_model" in str(ex):                                                       
-            return f"Model must be {x.CAR_MODEL_MIN}-{x.CAR_MODEL_MAX} characters", 400
+            return jsonify({
+                "field": "car_brand",
+                "error": f"Mærke skal være mellem {x.CAR_BRAND_MIN} og {x.CAR_BRAND_MAX} tegn"
+            }), 400
+        if "company_exception car_model" in str(ex):
+            return jsonify({
+                "field": "car_model",
+                "error": f"Model skal være mellem {x.CAR_MODEL_MIN} og {x.CAR_MODEL_MAX} tegn"
+            }), 400
         return str(ex), 500                                                                                
     finally:                                                                                             
         if "cursor" in locals(): cursor.close()                                                            
-        if "db" in locals(): db.close()  
+        if "db" in locals(): db.close()
 
 
 ##############################
