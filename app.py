@@ -574,7 +574,7 @@ def get_user_subscription():
         membership = cursor.fetchone()
 
         if not membership:
-            return "No active subscription found", 404
+            return jsonify(None), 200
 
         return jsonify(membership), 200
 
