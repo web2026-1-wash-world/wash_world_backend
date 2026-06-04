@@ -177,6 +177,68 @@ def profile():
     return jsonify({"user": current_user}), 200
 
 ##############################
+@app.patch("/user")
+@jwt_required()
+def update_user():
+    try:
+        current_email = get_jwt_identity()
+        parts = []
+        values = []
+
+        user_first_name = request.form.get("user_first_name", "").strip()
+        if user_first_name:
+            parts.append("user_first_name = %s")
+            values.append(x.validate_user_first_name(user_first_name))
+
+        user_last_name = request.form.get("user_last_name", "").strip()
+        if user_last_name:
+            parts.append("user_last_name = %s")
+            values.append(x.validate_user_last_name(user_last_name))
+
+        new_email = request.form.get("user_email", "").strip()
+        if new_email:
+            parts.append("user_email = %s")
+            values.append(x.validate_user_email(new_email))
+
+        if not parts:
+            return jsonify({"error": "No fields to update"}), 400
+
+        parts.append("user_updated_at = %s")
+        values.append(int(time.time()))
+        values.append(current_email)
+
+        partial_query = ", ".join(parts)
+        db, cursor = x.db()
+        cursor.execute(f"UPDATE users SET {partial_query} WHERE user_email = %s", values)
+        db.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"error": "User not found"}), 404
+
+        lookup_email = new_email if new_email else current_email
+        cursor.execute("SELECT user_first_name, user_last_name, user_email FROM users WHERE user_email = %s", (lookup_email,))
+        updated_user = cursor.fetchone()
+
+        result = {"message": "User updated", "user": updated_user}
+        if new_email and new_email != current_email:
+            result["access_token"] = create_access_token(identity=new_email)
+        return jsonify(result), 200
+    except Exception as ex:
+        ic(ex)
+        if "company_exception user_first_name" in str(ex):
+            return jsonify({"error": "Invalid first name"}), 400
+        if "company_exception user_last_name" in str(ex):
+            return jsonify({"error": "Invalid last name"}), 400
+        if "company_exception user_email" in str(ex):
+            return jsonify({"error": "Invalid email"}), 400
+        if "Duplicate entry" in str(ex):
+            return jsonify({"error": "Email already in use"}), 409
+        return jsonify({"error": "System under maintenance"}), 500
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
 @app.get("/verify/<key>")
 def verify_account(key):
     try:
