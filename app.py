@@ -116,6 +116,7 @@ def login():
         db, cursor = x.db()
         q = """
         SELECT
+            user_pk,
             user_first_name,
             user_last_name,
             user_email,
@@ -135,6 +136,7 @@ def login():
         ):
             return jsonify({"error": "Invalid credentials"}), 401
         
+        user_pk = user["user_pk"]
         user_first_name = user["user_first_name"]
         user_last_name = user["user_last_name"]
         user_email = user["user_email"]
@@ -145,6 +147,7 @@ def login():
             "message": "Login successful",
             "access_token": access_token,
             "user": {
+                "user_pk": user_pk,
                 "user_first_name": user_first_name,
                 "user_last_name": user_last_name,
                 "user_email": user_email
@@ -208,7 +211,7 @@ def logout():
     return jsonify({"message": "Logout successful"}), 200
 
 ##############################
-@app.delete("/delete-account/<user_pk>")
+@app.delete("/delete-user/<user_pk>")
 @jwt_required()
 def delete_account(user_pk):
     try:
@@ -219,9 +222,9 @@ def delete_account(user_pk):
         db.commit()
 
         if cursor.rowcount == 0:
-            return "User not found", 404
+            return jsonify({"message":"User not found"}), 404
 
-        return "Account deleted", 200
+        return jsonify({"message":"Din bruger blev slettet"}), 200
 
     except Exception as ex:
         ic(ex)
