@@ -116,11 +116,11 @@ def login():
         db, cursor = x.db()
         q = """
         SELECT
-            user_pk,
             user_first_name,
             user_last_name,
             user_email,
-            user_password_hashed
+            user_password_hashed,
+            user_verified_at
         FROM users
         WHERE user_email = %s
         """
@@ -135,8 +135,11 @@ def login():
             user_password
         ):
             return jsonify({"error": "Invalid credentials"}), 401
+            
         
-        user_pk = user["user_pk"]
+        if user["user_verified_at"] == 0:
+            return jsonify({"error": "Please verify your email before logging in"}), 403
+        
         user_first_name = user["user_first_name"]
         user_last_name = user["user_last_name"]
         user_email = user["user_email"]
@@ -147,7 +150,6 @@ def login():
             "message": "Login successful",
             "access_token": access_token,
             "user": {
-                "user_pk": user_pk,
                 "user_first_name": user_first_name,
                 "user_last_name": user_last_name,
                 "user_email": user_email
