@@ -74,6 +74,13 @@ def sign_up():
         return jsonify({"message": "Vi har sendt en verificerings-email"}), 201
     except Exception as ex:
         ic(ex)
+
+        if "Duplicate entry" in str(ex):
+            return jsonify({
+            "field": "user_email",
+            "error": "Email er allerede i brug"
+            }), 400
+
         if "company_exception user_first_name" in str(ex):
             return jsonify({
                 "field" : "user_first_name",
@@ -129,13 +136,13 @@ def login():
         user = cursor.fetchone()
 
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            return jsonify({"error": "Brugeren blev ikke fundet"}), 404
 
         if not check_password_hash(
             user["user_password_hashed"],
             user_password
         ):
-            return jsonify({"error": "Invalid credentials"}), 401
+            return jsonify({"error": "Ugyldig brugeroplysninger"}), 401
             
         
         if user["user_verified_at"] == 0:
@@ -206,7 +213,7 @@ def update_user():
             values.append(x.validate_user_email(new_email))
 
         if not parts:
-            return jsonify({"error": "No fields to update"}), 400
+            return jsonify({"error": "Intet at opdatere"}), 400
 
         parts.append("user_updated_at = %s")
         values.append(int(time.time()))
@@ -218,13 +225,13 @@ def update_user():
         db.commit()
 
         if cursor.rowcount == 0:
-            return jsonify({"error": "User not found"}), 404
+            return jsonify({"error": "Bruger ikke fundet"}), 404
 
         lookup_email = new_email if new_email else current_email
         cursor.execute("SELECT user_first_name, user_last_name, user_email FROM users WHERE user_email = %s", (lookup_email,))
         updated_user = cursor.fetchone()
 
-        result = {"message": "User updated", "user": updated_user}
+        result = {"message": "Bruger opdateret", "user": updated_user}
         if new_email and new_email != current_email:
             result["access_token"] = create_access_token(identity=new_email)
         return jsonify(result), 200
@@ -267,7 +274,7 @@ def verify_account(key):
         cursor.execute(q, (user_verified_at, key))
         db.commit()
         if cursor.rowcount == 0:
-            return "user already verified"
+            return "Brugeren er allerede valideret"
 
         return redirect(f"http://localhost:3000/login")
     except Exception as ex: 
@@ -284,7 +291,7 @@ def verify_account(key):
 @app.post("/logout")
 @jwt_required()
 def logout():
-    return jsonify({"message": "Logout successful"}), 200
+    return jsonify({"message": "Logout succesfuldt"}), 200
 
 ##############################
 @app.delete("/delete-user/<user_pk>")
@@ -298,7 +305,7 @@ def delete_account(user_pk):
         db.commit()
 
         if cursor.rowcount == 0:
-            return jsonify({"message":"User not found"}), 404
+            return jsonify({"message":"Brugeren blev ikke fundet"}), 404
 
         return jsonify({"message":"Din bruger blev slettet"}), 200
 
@@ -326,7 +333,7 @@ def forgot_password():
         if not row:
             return jsonify({
                 "field" : "user_email",
-                "error": "Email not found"
+                "error": "Emailen blev ikke fundet"
                 }), 400
 
         html_forgot_password = render_template(
@@ -336,7 +343,7 @@ def forgot_password():
 
         x.send_email("Reset your password", html_forgot_password)
 
-        return jsonify({"message": "Check your email"}), 200
+        return jsonify({"message": "Check din email"}), 200
 
     except Exception as ex:
         ic(ex)
@@ -344,7 +351,7 @@ def forgot_password():
         if "company_exception user_email" in str(ex):
             return jsonify({
                 "field" : "user_email",
-                "error": "invalid email"
+                "error": "Ugyldig email"
                 }), 400
 
         return {"error": "server error"}, 500
@@ -390,7 +397,7 @@ def reset_password():
         if confirm_password != password:
             return jsonify({
                 "field" : "confirm_password",
-                "error" : "Passwords do not match"
+                "error" : "Adgangskoder er ikke identiske"
                 }), 400
 
         key = x.validate_uuid4_paranoia( data.get("reset_key", ""))
@@ -409,7 +416,7 @@ def reset_password():
         if cursor.rowcount == 0:
             return jsonify({"error": "Invalid key"}), 400
 
-        return jsonify({"message": "Password reset successfully"}), 200
+        return jsonify({"message": "Adgangskode ændret succesfuldt"}), 200
 
     except Exception as ex:
         ic(ex)
@@ -417,7 +424,7 @@ def reset_password():
         if "company_exception user_password" in str(ex):
             return jsonify({
                 "field" : "user_password",
-                "error": f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters"
+                "error": f"Adgangskode minimum {x.USER_PASSWORD_MIN} til {x.USER_PASSWORD_MAX} tegn"
                 }), 400
 
         if "company_exception paranoia" in str(ex):
