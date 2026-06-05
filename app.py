@@ -230,6 +230,7 @@ def update_user():
         lookup_email = new_email if new_email else current_email
         cursor.execute("SELECT user_pk, user_first_name, user_last_name, user_email FROM users WHERE user_email = %s", (lookup_email,))
         updated_user = cursor.fetchone()
+        
 
         result = {"message": "Bruger opdateret", "user": updated_user}
 
