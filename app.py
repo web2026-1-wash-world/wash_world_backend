@@ -395,9 +395,9 @@ def reset_password():
         db.commit()
 
         if cursor.rowcount == 0:
-            return jsonify({"Invalid key"}), 400
+            return jsonify({"error": "Invalid key"}), 400
 
-        return redirect(f"http://localhost:3000/login")
+        return jsonify({"message": "Password reset successfully"}), 200
 
     except Exception as ex:
         ic(ex)
