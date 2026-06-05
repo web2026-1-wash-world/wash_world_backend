@@ -393,7 +393,7 @@ def reset_password():
         data = request.form
 
         password = x.validate_user_password( data.get("user_password", ""))
-        confirm_password = x.validate_user_password(data.get("confirm_password", ""))
+        confirm_password = data.get("confirm_password", "")
         if confirm_password != password:
             return jsonify({
                 "field" : "confirm_password",
