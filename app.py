@@ -231,14 +231,23 @@ def update_user():
     except Exception as ex:
         ic(ex)
         if "company_exception user_first_name" in str(ex):
-            return jsonify({"error": "Invalid first name"}), 400
+            return jsonify({
+                "field" : "user_first_name",
+                "error": f"Fornavn skal være mellem {x.USER_FIRST_NAME_MIN} og {x.USER_FIRST_NAME_MAX} tegn"
+                }), 400
+            
         if "company_exception user_last_name" in str(ex):
-            return jsonify({"error": "Invalid last name"}), 400
+            return jsonify({
+                "field" : "user_last_name",
+                "error": f"Efternavn skal være mellem {x.USER_LAST_NAME_MIN} og {x.USER_LAST_NAME_MAX} tegn"
+                }), 400
+
         if "company_exception user_email" in str(ex):
-            return jsonify({"error": "Invalid email"}), 400
-        if "Duplicate entry" in str(ex):
-            return jsonify({"error": "Email already in use"}), 409
-        return jsonify({"error": "System under maintenance"}), 500
+            return jsonify({
+                "field" : "user_email",
+                "error":"Ugyldig email"
+                }), 400
+
     finally:
         if "cursor" in locals(): cursor.close()
         if "db" in locals(): db.close()
