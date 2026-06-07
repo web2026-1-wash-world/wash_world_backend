@@ -99,7 +99,7 @@ def send_email(subject, activation_email):
         # Copy the key : 
 
         # Email and password of the sender's Gmail account
-        sender_email = "olivervalter13@gmail.com"
+        sender_email = "rasmus.meinche@gmail.com"
         password = "dqid pudd nhdb wbmb"  # If 2FA is on, use an App Password instead
 
         # Receiver email address

@@ -155,10 +155,10 @@ def login():
         ic(ex)
 
         if "company_exception user_email" in str(ex):
-            return jsonify({"error": "Invalid credentials"}), 401
+            return jsonify({"error": "Forkert email"}), 401
 
         if "company_exception user_password" in str(ex):
-            return jsonify({"error": "Invalid credentials"}), 401
+            return jsonify({"error": "Forkert adgangskode"}), 401
 
         return jsonify({"error": "System under maintenance"}), 500
 
