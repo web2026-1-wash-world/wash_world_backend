@@ -74,6 +74,13 @@ def sign_up():
         return jsonify({"message": "Vi har sendt en verificerings-email"}), 201
     except Exception as ex:
         ic(ex)
+
+        if "Duplicate entry" in str(ex):
+            return jsonify({
+            "field": "user_email",
+            "error": "Email er allerede i brug"
+            }), 400
+
         if "company_exception user_first_name" in str(ex):
             return jsonify({
                 "field" : "user_first_name",
@@ -116,10 +123,12 @@ def login():
         db, cursor = x.db()
         q = """
         SELECT
+            user_pk,
             user_first_name,
             user_last_name,
             user_email,
-            user_password_hashed
+            user_password_hashed,
+            user_verified_at
         FROM users
         WHERE user_email = %s
         """
@@ -127,14 +136,19 @@ def login():
         user = cursor.fetchone()
 
         if not user:
-            return jsonify({"error": "User not found"}), 404
+            return jsonify({"error": "Brugeren blev ikke fundet"}), 404
 
         if not check_password_hash(
             user["user_password_hashed"],
             user_password
         ):
-            return jsonify({"error": "Invalid credentials"}), 401
+            return jsonify({"error": "Ugyldig brugeroplysninger"}), 401
+            
         
+        if user["user_verified_at"] == 0:
+            return jsonify({"error": "Verificer konto for at logge ind"}), 403
+        
+        user_pk = user["user_pk"]
         user_first_name = user["user_first_name"]
         user_last_name = user["user_last_name"]
         user_email = user["user_email"]
@@ -145,6 +159,7 @@ def login():
             "message": "Login successful",
             "access_token": access_token,
             "user": {
+                "user_pk" : user_pk,
                 "user_first_name": user_first_name,
                 "user_last_name": user_last_name,
                 "user_email": user_email
@@ -174,6 +189,79 @@ def profile():
     return jsonify({"user": current_user}), 200
 
 ##############################
+@app.patch("/user")
+@jwt_required()
+def update_user():
+    try:
+        current_email = get_jwt_identity()
+        parts = []
+        values = []
+
+        user_first_name = request.form.get("user_first_name", "").strip()
+        if user_first_name:
+            parts.append("user_first_name = %s")
+            values.append(x.validate_user_first_name(user_first_name))
+
+        user_last_name = request.form.get("user_last_name", "").strip()
+        if user_last_name:
+            parts.append("user_last_name = %s")
+            values.append(x.validate_user_last_name(user_last_name))
+
+        new_email = request.form.get("user_email", "").strip()
+        if new_email:
+            parts.append("user_email = %s")
+            values.append(x.validate_user_email(new_email))
+
+        if not parts:
+            return jsonify({"error": "Intet at opdatere"}), 400
+
+        parts.append("user_updated_at = %s")
+        values.append(int(time.time()))
+        values.append(current_email)
+
+        partial_query = ", ".join(parts)
+        db, cursor = x.db()
+        cursor.execute(f"UPDATE users SET {partial_query} WHERE user_email = %s", values)
+        db.commit()
+
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Bruger ikke fundet"}), 404
+
+        lookup_email = new_email if new_email else current_email
+        cursor.execute("SELECT user_pk, user_first_name, user_last_name, user_email FROM users WHERE user_email = %s", (lookup_email,))
+        updated_user = cursor.fetchone()
+        
+
+        result = {"message": "Bruger opdateret", "user": updated_user}
+
+        if new_email and new_email != current_email:
+            result["access_token"] = create_access_token(identity=new_email)
+        return jsonify(result), 200
+    except Exception as ex:
+        ic(ex)
+        if "company_exception user_first_name" in str(ex):
+            return jsonify({
+                "field" : "user_first_name",
+                "error": f"Fornavn skal være mellem {x.USER_FIRST_NAME_MIN} og {x.USER_FIRST_NAME_MAX} tegn"
+                }), 400
+            
+        if "company_exception user_last_name" in str(ex):
+            return jsonify({
+                "field" : "user_last_name",
+                "error": f"Efternavn skal være mellem {x.USER_LAST_NAME_MIN} og {x.USER_LAST_NAME_MAX} tegn"
+                }), 400
+
+        if "company_exception user_email" in str(ex):
+            return jsonify({
+                "field" : "user_email",
+                "error":"Ugyldig email"
+                }), 400
+
+    finally:
+        if "cursor" in locals(): cursor.close()
+        if "db" in locals(): db.close()
+
+##############################
 @app.get("/verify/<key>")
 def verify_account(key):
     try:
@@ -188,7 +276,7 @@ def verify_account(key):
         cursor.execute(q, (user_verified_at, key))
         db.commit()
         if cursor.rowcount == 0:
-            return "user already verified"
+            return "Brugeren er allerede valideret"
 
         return redirect(f"http://localhost:3000/login")
     except Exception as ex: 
@@ -205,10 +293,10 @@ def verify_account(key):
 @app.post("/logout")
 @jwt_required()
 def logout():
-    return jsonify({"message": "Logout successful"}), 200
+    return jsonify({"message": "Logout succesfuldt"}), 200
 
 ##############################
-@app.delete("/delete-account/<user_pk>")
+@app.delete("/delete-user/<user_pk>")
 @jwt_required()
 def delete_account(user_pk):
     try:
@@ -219,9 +307,9 @@ def delete_account(user_pk):
         db.commit()
 
         if cursor.rowcount == 0:
-            return "User not found", 404
+            return jsonify({"message":"Brugeren blev ikke fundet"}), 404
 
-        return "Account deleted", 200
+        return jsonify({"message":"Din bruger blev slettet"}), 200
 
     except Exception as ex:
         ic(ex)
@@ -247,7 +335,7 @@ def forgot_password():
         if not row:
             return jsonify({
                 "field" : "user_email",
-                "error": "Email not found"
+                "error": "Emailen blev ikke fundet"
                 }), 400
 
         html_forgot_password = render_template(
@@ -257,7 +345,7 @@ def forgot_password():
 
         x.send_email("Reset your password", html_forgot_password)
 
-        return jsonify({"message": "Check your email"}), 200
+        return jsonify({"message": "Check din email"}), 200
 
     except Exception as ex:
         ic(ex)
@@ -265,7 +353,7 @@ def forgot_password():
         if "company_exception user_email" in str(ex):
             return jsonify({
                 "field" : "user_email",
-                "error": "invalid email"
+                "error": "Ugyldig email"
                 }), 400
 
         return {"error": "server error"}, 500
@@ -307,11 +395,11 @@ def reset_password():
         data = request.form
 
         password = x.validate_user_password( data.get("user_password", ""))
-        confirm_password = x.validate_user_password(data.get("confirm_password", ""))
+        confirm_password = data.get("confirm_password", "")
         if confirm_password != password:
             return jsonify({
                 "field" : "confirm_password",
-                "error" : "Passwords do not match"
+                "error" : "Adgangskoder er ikke identiske"
                 }), 400
 
         key = x.validate_uuid4_paranoia( data.get("reset_key", ""))
@@ -328,9 +416,9 @@ def reset_password():
         db.commit()
 
         if cursor.rowcount == 0:
-            return jsonify({"Invalid key"}), 400
+            return jsonify({"error": "Invalid key"}), 400
 
-        return redirect(f"http://localhost:3000/login")
+        return jsonify({"message": "Adgangskode ændret succesfuldt"}), 200
 
     except Exception as ex:
         ic(ex)
@@ -338,7 +426,7 @@ def reset_password():
         if "company_exception user_password" in str(ex):
             return jsonify({
                 "field" : "user_password",
-                "error": f"Password {x.USER_PASSWORD_MIN} to {x.USER_PASSWORD_MAX} characters"
+                "error": f"Adgangskode minimum {x.USER_PASSWORD_MIN} til {x.USER_PASSWORD_MAX} tegn"
                 }), 400
 
         if "company_exception paranoia" in str(ex):
